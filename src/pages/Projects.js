@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Container, Row, Col, Card, Button, Form, InputGroup } from 'react-bootstrap';
 import { Link } from 'react-router-dom';
 import styled from 'styled-components';
-import axios from 'axios';
+import api from '../services/api';
 
 const PageHeader = styled.div`
   background: linear-gradient(135deg, #4e54c8, #8f94fb);
@@ -74,89 +74,36 @@ const FilterSection = styled.div`
 
 const Projects = () => {
   const [projects, setProjects] = useState([]);
+  const [categories, setCategories] = useState(['All']);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [sortBy, setSortBy] = useState('newest');
-  
-  const categories = ['All', 'Technology', 'Art', 'Food', 'Games', 'Music', 'Publishing'];
+  const [error, setError] = useState('');
 
+  // Fetch categories and projects
   useEffect(() => {
-    const fetchProjects = async () => {
+    const fetchData = async () => {
+      setLoading(true);
       try {
-        const response = await axios.get('/api/projects/');
-        setProjects(response.data);
-      } catch (error) {
-        console.error('Error fetching projects:', error);
+        // Fetch categories first
+        const categoriesResponse = await api.get('/categories/');
+        const categoryNames = ['All', ...categoriesResponse.data.map(cat => cat.name)];
+        setCategories(categoryNames);
         
-        setProjects([
-          {
-            id: 1,
-            title: 'Eco-Friendly Water Bottle',
-            description: 'A sustainable water bottle that helps reduce plastic waste.',
-            image_url: 'https://images.unsplash.com/photo-1602143407151-7111542de6e8',
-            current_amount: 15000,
-            target_amount: 20000,
-            category: 'Technology',
-            created_at: '2023-10-15T10:30:00Z',
-          },
-          {
-            id: 2,
-            title: 'Smart Home Garden',
-            description: 'An automated garden system for growing herbs and vegetables indoors.',
-            image_url: 'https://images.unsplash.com/photo-1585320806297-9794b3e4eeae',
-            current_amount: 8000,
-            target_amount: 30000,
-            category: 'Food',
-            created_at: '2023-10-20T14:45:00Z',
-          },
-          {
-            id: 3,
-            title: 'Educational Coding Kit for Kids',
-            description: 'A fun kit to teach programming basics to children aged 8-12.',
-            image_url: 'https://images.unsplash.com/photo-1603354350317-6f7aaa5911c5',
-            current_amount: 25000,
-            target_amount: 40000,
-            category: 'Technology',
-            created_at: '2023-10-10T09:15:00Z',
-          },
-          {
-            id: 4,
-            title: 'Handcrafted Ceramic Art Collection',
-            description: 'A collection of unique handmade ceramic art pieces for your home.',
-            image_url: 'https://images.unsplash.com/photo-1565193566173-7a0ee3dbe261',
-            current_amount: 4500,
-            target_amount: 10000,
-            category: 'Art',
-            created_at: '2023-10-25T16:20:00Z',
-          },
-          {
-            id: 5,
-            title: 'Indie Game Development',
-            description: 'Support the development of an innovative indie puzzle game.',
-            image_url: 'https://images.unsplash.com/photo-1556438064-2d7646166914',
-            current_amount: 12000,
-            target_amount: 50000,
-            category: 'Games',
-            created_at: '2023-10-05T11:30:00Z',
-          },
-          {
-            id: 6,
-            title: 'Sustainable Fashion Line',
-            description: 'Eco-friendly clothing made from recycled materials.',
-            image_url: 'https://images.unsplash.com/photo-1556905055-8f358a7a47b2',
-            current_amount: 18000,
-            target_amount: 25000,
-            category: 'Art',
-            created_at: '2023-10-18T13:10:00Z',
-          }
-        ]);
+        // Then fetch projects
+        const projectsResponse = await api.get('/projects/');
+        setProjects(projectsResponse.data);
+        setError('');
+      } catch (error) {
+        console.error('Error fetching data:', error);
+        setError('Failed to load projects. Please try again later.');
       } finally {
         setLoading(false);
       }
     };
 
-    fetchProjects();
+    fetchData();
   }, []);
 
   const handleSearch = (e) => {
@@ -171,28 +118,42 @@ const Projects = () => {
     setSortBy(e.target.value);
   };
 
-  
+  // Filter projects based on search term and category
   const filteredProjects = projects.filter(project => {
     const matchesSearch = project.title.toLowerCase().includes(searchTerm.toLowerCase()) || 
                           project.description.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesCategory = selectedCategory === 'All' || project.category === selectedCategory;
+    const matchesCategory = selectedCategory === 'All' || 
+                           (project.category && project.category.name === selectedCategory);
     
     return matchesSearch && matchesCategory;
   });
 
- 
+  // Sort projects based on selected sort option
   const sortedProjects = [...filteredProjects].sort((a, b) => {
     if (sortBy === 'newest') {
       return new Date(b.created_at) - new Date(a.created_at);
     } else if (sortBy === 'oldest') {
       return new Date(a.created_at) - new Date(b.created_at);
     } else if (sortBy === 'most_funded') {
-      return b.current_amount - a.current_amount;
+      const aProgress = a.progress_percentage || 0;
+      const bProgress = b.progress_percentage || 0;
+      return bProgress - aProgress;
     } else if (sortBy === 'least_funded') {
-      return a.current_amount - b.current_amount;
+      const aProgress = a.progress_percentage || 0;
+      const bProgress = b.progress_percentage || 0;
+      return aProgress - bProgress;
     }
     return 0;
   });
+
+  // Get featured image for a project
+  const getFeaturedImage = (project) => {
+    if (project.images && project.images.length > 0) {
+      const featuredImage = project.images.find(img => img.is_featured);
+      return featuredImage ? featuredImage.image : project.images[0].image;
+    }
+    return 'https://via.placeholder.com/300x200?text=No+Image';
+  };
 
   return (
     <>
@@ -244,6 +205,10 @@ const Projects = () => {
               <span className="visually-hidden">Loading...</span>
             </div>
           </div>
+        ) : error ? (
+          <div className="alert alert-danger" role="alert">
+            {error}
+          </div>
         ) : (
           <>
             {sortedProjects.length === 0 ? (
@@ -256,23 +221,34 @@ const Projects = () => {
                 {sortedProjects.map(project => (
                   <Col key={project.id} md={4} className="mb-4">
                     <ProjectCard>
-                      <ProjectImage variant="top" src={project.image_url} />
+                      <ProjectImage variant="top" src={getFeaturedImage(project)} />
                       <Card.Body>
                         <Card.Title>{project.title}</Card.Title>
-                        <Card.Text>{project.description}</Card.Text>
+                        <Card.Text>
+                          {project.description.length > 100 
+                            ? `${project.description.substring(0, 100)}...` 
+                            : project.description}
+                        </Card.Text>
                         <div className="mb-2">
-                          <span className="badge bg-light text-dark">{project.category}</span>
+                          <span className="badge bg-light text-dark">
+                            {project.category ? project.category.name : 'Uncategorized'}
+                          </span>
+                          {project.tags && project.tags.map(tag => (
+                            <span key={tag.id} className="badge bg-info text-white ms-1">
+                              {tag.name}
+                            </span>
+                          ))}
                         </div>
                         <ProgressBar>
-                          <Progress width={(project.current_amount / project.target_amount) * 100} />
+                          <Progress width={project.progress_percentage || 0} />
                         </ProgressBar>
                         <div className="d-flex justify-content-between">
-                          <small>${project.current_amount.toLocaleString()} raised</small>
-                          <small>{Math.round((project.current_amount / project.target_amount) * 100)}%</small>
+                          <small>${project.current_amount || 0} raised</small>
+                          <small>{project.progress_percentage || 0}%</small>
                         </div>
                         <Button 
                           as={Link} 
-                          to={`/projects/${project.id}`}
+                          to={`/projects/${project.slug}`}
                           variant="primary" 
                           className="w-100 mt-3"
                         >

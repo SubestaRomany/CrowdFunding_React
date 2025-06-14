@@ -3,6 +3,7 @@ import { Container, Row, Col, Form, Button, Alert, Card } from 'react-bootstrap'
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import styled from 'styled-components';
 import { AuthContext } from '../context/AuthContext';
+import api from '../services/api';
 
 const LoginContainer = styled(Container)`
   padding: 4rem 0;
@@ -50,7 +51,7 @@ const StyledButton = styled(Button)`
 
 const Login = () => {
   const [formData, setFormData] = useState({
-    username: '',
+    email: '',
     password: ''
   });
   const [error, setError] = useState('');
@@ -60,7 +61,6 @@ const Login = () => {
   const navigate = useNavigate();
   const location = useLocation();
   
-
   const from = location.state?.from?.pathname || '/';
 
   const handleChange = (e) => {
@@ -73,8 +73,8 @@ const Login = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     
-    if (!formData.username.trim() || !formData.password) {
-      setError('Please enter both username and password');
+    if (!formData.email.trim() || !formData.password) {
+      setError('Please enter both email and password');
       return;
     }
     
@@ -82,11 +82,42 @@ const Login = () => {
     setError('');
     
     try {
-      await login(formData);
+      // Make API call to Django login endpoint
+      const response = await api.post('/login/', {
+        email: formData.email,
+        password: formData.password
+      });
+      
+      // Extract user data and token from response
+      const { user, msg } = response.data;
+      
+      // Store token in localStorage (assuming your AuthContext handles this)
+      await login({
+        user: user,
+        token: user.token || localStorage.getItem('token') // Use token if available
+      });
+      
+      console.log(msg); // Log success message
+      
+      // Navigate to the page user was trying to access, or home
       navigate(from, { replace: true });
     } catch (error) {
       console.error('Login error:', error);
-      setError('Invalid username or password');
+      
+      // Handle different error responses from Django
+      if (error.response) {
+        if (error.response.status === 401) {
+          setError('Invalid email or password');
+        } else if (error.response.data && error.response.data.error) {
+          setError(error.response.data.error);
+        } else if (error.response.data && error.response.data.non_field_errors) {
+          setError(error.response.data.non_field_errors[0]);
+        } else {
+          setError('Login failed. Please try again.');
+        }
+      } else {
+        setError('Network error. Please check your connection.');
+      }
     } finally {
       setLoading(false);
     }
@@ -108,13 +139,13 @@ const Login = () => {
               
               <Form onSubmit={handleSubmit}>
                 <Form.Group className="mb-3">
-                  <Form.Label>Username</Form.Label>
+                  <Form.Label>Email</Form.Label>
                   <Form.Control
-                    type="text"
-                    name="username"
-                    value={formData.username}
+                    type="email"
+                    name="email"
+                    value={formData.email}
                     onChange={handleChange}
-                    placeholder="Enter your username"
+                    placeholder="Enter your email"
                     required
                   />
                 </Form.Group>

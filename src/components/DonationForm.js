@@ -1,8 +1,9 @@
-import React, { useState, useContext } from 'react';
-import { Form, Button, Card, Alert, InputGroup } from 'react-bootstrap';
+import React, { useState, useContext, useEffect } from 'react';
+import { Form, Button, Card, Alert, InputGroup, Spinner } from 'react-bootstrap';
 import styled from 'styled-components';
 import { AuthContext } from '../context/AuthContext';
-import axios from 'axios';
+import api from '../services/api';
+import { useFormStatus } from 'react-dom';
 
 const DonationCard = styled(Card)`
   border: none;
@@ -55,23 +56,79 @@ const AmountButton = styled(Button)`
   }
 `;
 
-const DonationForm = ({ projectId, projectTitle, currentAmount, goalAmount, onDonationComplete }) => {
-  const { currentUser, token } = useContext(AuthContext);
+// Submit button component with loading state
+function SubmitButton() {
+  const { pending } = useFormStatus();
+  
+  return (
+    <StyledButton type="submit" disabled={pending}>
+      {pending ? (
+        <>
+          <Spinner
+            as="span"
+            animation="border"
+            size="sm"
+            role="status"
+            aria-hidden="true"
+            className="me-2"
+          />
+          Processing...
+        </>
+      ) : (
+        'Donate Now'
+      )}
+    </StyledButton>
+  );
+}
+
+const DonationForm = ({ projectId, projectTitle, onDonationComplete }) => {
+  const { currentUser } = useContext(AuthContext);
   const [amount, setAmount] = useState('');
   const [customAmount, setCustomAmount] = useState(false);
-  const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
+  const [projectData, setProjectData] = useState({
+    currentAmount: 0,
+    goalAmount: 0
+  });
+  const [loading, setLoading] = useState(true);
   
   const predefinedAmounts = [5, 10, 25, 50, 100];
+  
+  // Fetch project funding data
+  useEffect(() => {
+    const fetchProjectData = async () => {
+      try {
+        // Get project details
+        const projectResponse = await api.get(`/projects/${projectId}/`);
+        
+        // Get total donations for this project
+        const donationsResponse = await api.get(`/donations/total/${projectId}/`);
+        
+        setProjectData({
+          currentAmount: parseFloat(donationsResponse.data.total_donated) || 0,
+          goalAmount: parseFloat(projectResponse.data.goal) || 0
+        });
+      } catch (err) {
+        console.error('Error fetching project data:', err);
+        setError('Could not load project funding information');
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    fetchProjectData();
+  }, [projectId]);
   
   const handleAmountSelect = (value) => {
     setAmount(value);
     setCustomAmount(false);
+    setError('');
   };
   
   const handleCustomAmountChange = (e) => {
     setAmount(e.target.value);
+    setError('');
   };
   
   const validateForm = () => {
@@ -100,26 +157,26 @@ const DonationForm = ({ projectId, projectTitle, currentAmount, goalAmount, onDo
       return;
     }
     
-    setLoading(true);
     setError('');
     
     try {
-      // In a real app, you would make an API call
-      // const response = await axios.post('/api/donations/', {
-      //   project: projectId,
-      //   amount: parseFloat(amount)
-      // }, {
-      //   headers: { Authorization: `Bearer ${token}` }
-      // });
-      
-      // For demo purposes, we'll simulate a successful donation
-      await new Promise(resolve => setTimeout(resolve, 1500));
+      // Make API call to create donation
+      const response = await api.post('/donations/', {
+        project: projectId,
+        amount: parseFloat(amount)
+      });
       
       setSuccess(true);
       
+      // Update project data after successful donation
+      setProjectData(prev => ({
+        ...prev,
+        currentAmount: prev.currentAmount + parseFloat(amount)
+      }));
+      
       // Notify parent component about the donation
       if (onDonationComplete) {
-        onDonationComplete(parseFloat(amount));
+        onDonationComplete(parseFloat(amount), response.data);
       }
       
       // Reset form after 3 seconds
@@ -130,14 +187,44 @@ const DonationForm = ({ projectId, projectTitle, currentAmount, goalAmount, onDo
     } catch (error) {
       console.error('Donation error:', error);
       if (error.response && error.response.data) {
-        setError(error.response.data.message || 'Failed to process donation');
+        // Handle validation errors from Django
+        if (typeof error.response.data === 'object') {
+          const errorMessages = Object.values(error.response.data)
+            .flat()
+            .join(' ');
+          setError(errorMessages || 'Failed to process donation');
+        } else {
+          setError(error.response.data || 'Failed to process donation');
+        }
       } else {
         setError('Failed to process donation. Please try again.');
       }
-    } finally {
-      setLoading(false);
     }
   };
+  
+  // Format currency
+  const formatCurrency = (amount) => {
+    return parseFloat(amount).toLocaleString('en-US', {
+      style: 'currency',
+      currency: 'USD',
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 2
+    });
+  };
+  
+  if (loading) {
+    return (
+      <DonationCard>
+        <CardHeader>
+          <CardTitle>Support this project</CardTitle>
+        </CardHeader>
+        <Card.Body className="p-4 text-center">
+          <Spinner animation="border" variant="primary" />
+          <p className="mt-3">Loading project funding information...</p>
+        </Card.Body>
+      </DonationCard>
+    );
+  }
   
   return (
     <DonationCard>
@@ -148,7 +235,7 @@ const DonationForm = ({ projectId, projectTitle, currentAmount, goalAmount, onDo
         {success ? (
           <Alert variant="success">
             <Alert.Heading>Thank you for your donation!</Alert.Heading>
-            <p>Your contribution of ${parseFloat(amount).toFixed(2)} to "{projectTitle}" has been received.</p>
+            <p>Your contribution of {formatCurrency(amount)} to "{projectTitle}" has been received.</p>
           </Alert>
         ) : (
           <Form onSubmit={handleSubmit}>
@@ -161,10 +248,10 @@ const DonationForm = ({ projectId, projectTitle, currentAmount, goalAmount, onDo
                   <AmountButton
                     key={value}
                     type="button"
-                    active={!customAmount && amount === value}
+                    active={!customAmount && parseFloat(amount) === value}
                     onClick={() => handleAmountSelect(value)}
                   >
-                    ${value}
+                    {formatCurrency(value)}
                   </AmountButton>
                 ))}
                 <AmountButton
@@ -201,33 +288,28 @@ const DonationForm = ({ projectId, projectTitle, currentAmount, goalAmount, onDo
             <div className="mb-4">
               <div className="d-flex justify-content-between mb-2">
                 <span>Current funding:</span>
-                <span>${currentAmount.toFixed(2)}</span>
+                <span>{formatCurrency(projectData.currentAmount)}</span>
               </div>
               <div className="progress" style={{ height: '10px' }}>
                 <div
                   className="progress-bar"
                   role="progressbar"
                   style={{
-                    width: `${Math.min((currentAmount / goalAmount) * 100, 100)}%`,
+                    width: `${Math.min((projectData.currentAmount / projectData.goalAmount) * 100, 100)}%`,
                     background: 'linear-gradient(135deg, #4e54c8, #8f94fb)'
                   }}
-                  aria-valuenow={Math.min((currentAmount / goalAmount) * 100, 100)}
+                  aria-valuenow={Math.min((projectData.currentAmount / projectData.goalAmount) * 100, 100)}
                   aria-valuemin="0"
                   aria-valuemax="100"
                 ></div>
               </div>
               <div className="d-flex justify-content-between mt-2">
                 <span>Goal:</span>
-                <span>${goalAmount.toFixed(2)}</span>
+                <span>{formatCurrency(projectData.goalAmount)}</span>
               </div>
             </div>
             
-            <StyledButton 
-              type="submit" 
-              disabled={loading || !amount || !currentUser}
-            >
-              {loading ? 'Processing...' : 'Donate Now'}
-            </StyledButton>
+            <SubmitButton />
             
             {!currentUser && (
               <Alert variant="warning" className="mt-3 mb-0">

@@ -1,8 +1,9 @@
-import React, { useContext } from 'react';
-import { Navbar, Container, Nav, Button, NavDropdown } from 'react-bootstrap';
+import React, { useContext, useState, useEffect } from 'react';
+import { Navbar, Container, Nav, Button, NavDropdown, Badge, Spinner } from 'react-bootstrap';
 import { Link, useNavigate } from 'react-router-dom';
 import styled from 'styled-components';
 import { AuthContext } from '../context/AuthContext';
+import api from '../services/api';
 
 const StyledNavbar = styled(Navbar)`
   background: linear-gradient(135deg, #4e54c8, #8f94fb);
@@ -71,13 +72,80 @@ const UserDropdown = styled(NavDropdown)`
   }
 `;
 
+const ProfilePic = styled.img`
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  margin-right: 8px;
+  object-fit: cover;
+  border: 2px solid white;
+`;
+
+const NotificationBadge = styled(Badge)`
+  position: relative;
+  top: -8px;
+  right: 5px;
+  padding: 0.25rem 0.5rem;
+  border-radius: 50%;
+  background-color: #ff4757;
+  color: white;
+  font-size: 0.7rem;
+`;
+
 const Header = () => {
   const { currentUser, logout } = useContext(AuthContext);
   const navigate = useNavigate();
+  const [userProfile, setUserProfile] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [notifications, setNotifications] = useState([]);
   
-  const handleLogout = () => {
-    logout();
-    navigate('/');
+  useEffect(() => {
+    const fetchUserProfile = async () => {
+      if (currentUser) {
+        setLoading(true);
+        try {
+          const response = await api.get('/auth/profile/');
+          setUserProfile(response.data);
+          
+          // Fetch notifications if needed
+          const notificationsResponse = await api.get('/notifications/');
+          setNotifications(notificationsResponse.data.filter(n => !n.is_read));
+        } catch (error) {
+          console.error('Error fetching user profile:', error);
+        } finally {
+          setLoading(false);
+        }
+      }
+    };
+    
+    fetchUserProfile();
+  }, [currentUser]);
+  
+  const handleLogout = async () => {
+    try {
+      await api.post('/auth/logout/');
+      logout();
+      navigate('/');
+    } catch (error) {
+      console.error('Error logging out:', error);
+    }
+  };
+  
+  const getDisplayName = () => {
+    if (loading) return <Spinner animation="border" size="sm" />;
+    if (userProfile) {
+      return userProfile.first_name 
+        ? `${userProfile.first_name} ${userProfile.last_name || ''}`
+        : userProfile.username;
+    }
+    return currentUser?.username || 'User';
+  };
+  
+  const getProfileImage = () => {
+    if (userProfile && userProfile.profile_image) {
+      return userProfile.profile_image;
+    }
+    return 'https://via.placeholder.com/30?text=U';
   };
   
   return (
@@ -89,19 +157,35 @@ const Header = () => {
           <Nav className="me-auto">
             <NavLink as={Link} to="/">Home</NavLink>
             <NavLink as={Link} to="/projects">Discover</NavLink>
-            <NavLink as={Link} to="/create-project">Start a Project</NavLink>
+            {currentUser && (
+              <NavLink as={Link} to="/create-project">Start a Project</NavLink>
+            )}
           </Nav>
           <Nav>
             {currentUser ? (
-              <UserDropdown 
-                title={currentUser.name || currentUser.username} 
-                id="user-dropdown"
-              >
-                <NavDropdown.Item as={Link} to="/profile">My Profile</NavDropdown.Item>
-                <NavDropdown.Item as={Link} to="/my-projects">My Projects</NavDropdown.Item>
-                <NavDropdown.Divider />
-                <NavDropdown.Item onClick={handleLogout}>Logout</NavDropdown.Item>
-              </UserDropdown>
+              <>
+                <NavLink as={Link} to="/notifications">
+                  <i className="fas fa-bell"></i>
+                  {notifications.length > 0 && (
+                    <NotificationBadge>{notifications.length}</NotificationBadge>
+                  )}
+                </NavLink>
+                <UserDropdown 
+                  title={
+                    <span>
+                      <ProfilePic src={getProfileImage()} alt="Profile" />
+                      {getDisplayName()}
+                    </span>
+                  } 
+                  id="user-dropdown"
+                >
+                  <NavDropdown.Item as={Link} to="/profile">My Profile</NavDropdown.Item>
+                  <NavDropdown.Item as={Link} to="/my-projects">My Projects</NavDropdown.Item>
+                  <NavDropdown.Item as={Link} to="/donations">My Donations</NavDropdown.Item>
+                  <NavDropdown.Divider />
+                  <NavDropdown.Item onClick={handleLogout}>Logout</NavDropdown.Item>
+                </UserDropdown>
+              </>
             ) : (
               <>
                 <NavLink as={Link} to="/login">Login</NavLink>

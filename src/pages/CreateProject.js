@@ -1,8 +1,8 @@
-import React, { useState, useContext } from 'react';
-import { Container, Row, Col, Form, Button, Alert, Card } from 'react-bootstrap';
+import React, { useState, useContext, useEffect } from 'react';
+import { Container, Row, Col, Form, Button, Alert, Card, Spinner } from 'react-bootstrap';
 import { useNavigate } from 'react-router-dom';
 import styled from 'styled-components';
-import axios from 'axios';
+import api from '../services/api';
 import { AuthContext } from '../context/AuthContext';
 
 const PageHeader = styled.div`
@@ -40,6 +40,14 @@ const StyledButton = styled(Button)`
   }
 `;
 
+const ImagePreview = styled.img`
+  width: 100%;
+  height: 200px;
+  object-fit: cover;
+  border-radius: 8px;
+  margin-top: 10px;
+`;
+
 const CreateProject = () => {
   const { currentUser } = useContext(AuthContext);
   const navigate = useNavigate();
@@ -48,28 +56,70 @@ const CreateProject = () => {
     title: '',
     description: '',
     category: '',
-    target_amount: '',
+    goal: '',
     end_date: '',
-    image_url: ''
+    tags: []
   });
   
+  const [projectImage, setProjectImage] = useState(null);
+  const [imagePreview, setImagePreview] = useState('');
+  const [categories, setCategories] = useState([]);
+  const [tags, setTags] = useState([]);
+  const [selectedTags, setSelectedTags] = useState([]);
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [fetchingData, setFetchingData] = useState(true);
   
-  const categories = ['Technology', 'Art', 'Food', 'Games', 'Music', 'Publishing'];
-
+  useEffect(() => {
+    const fetchCategoriesAndTags = async () => {
+      try {
+        const [categoriesResponse, tagsResponse] = await Promise.all([
+          api.get('/categories/'),
+          api.get('/tags/')
+        ]);
+        
+        setCategories(categoriesResponse.data);
+        setTags(tagsResponse.data);
+      } catch (error) {
+        console.error('Error fetching categories and tags:', error);
+      } finally {
+        setFetchingData(false);
+      }
+    };
+    
+    fetchCategoriesAndTags();
+  }, []);
   
-  if (!currentUser) {
-    navigate('/login', { state: { from: { pathname: '/create-project' } } });
-    return null;
-  }
+  useEffect(() => {
+    if (!currentUser) {
+      navigate('/login', { state: { from: { pathname: '/create-project' } } });
+    }
+  }, [currentUser, navigate]);
 
   const handleChange = (e) => {
+    const { name, value } = e.target;
     setFormData({
       ...formData,
-      [e.target.name]: e.target.value
+      [name]: value
     });
+  };
+
+  const handleImageChange = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      setProjectImage(file);
+      setImagePreview(URL.createObjectURL(file));
+    }
+  };
+
+  const handleTagChange = (e) => {
+    const tagId = parseInt(e.target.value);
+    if (e.target.checked) {
+      setSelectedTags([...selectedTags, tagId]);
+    } else {
+      setSelectedTags(selectedTags.filter(id => id !== tagId));
+    }
   };
 
   const validateForm = () => {
@@ -87,10 +137,10 @@ const CreateProject = () => {
       newErrors.category = 'Category is required';
     }
     
-    if (!formData.target_amount) {
-      newErrors.target_amount = 'Target amount is required';
-    } else if (isNaN(formData.target_amount) || parseFloat(formData.target_amount) <= 0) {
-      newErrors.target_amount = 'Target amount must be a positive number';
+    if (!formData.goal) {
+      newErrors.goal = 'Funding goal is required';
+    } else if (isNaN(formData.goal) || parseFloat(formData.goal) <= 0) {
+      newErrors.goal = 'Funding goal must be a positive number';
     }
     
     if (!formData.end_date) {
@@ -103,8 +153,8 @@ const CreateProject = () => {
       }
     }
     
-    if (!formData.image_url.trim()) {
-      newErrors.image_url = 'Image URL is required';
+    if (!projectImage) {
+      newErrors.image = 'Project image is required';
     }
     
     setErrors(newErrors);
@@ -121,13 +171,34 @@ const CreateProject = () => {
     setLoading(true);
     
     try {
+      // First create the project
+      const projectData = new FormData();
+      projectData.append('title', formData.title);
+      projectData.append('description', formData.description);
+      projectData.append('category', formData.category);
+      projectData.append('goal', formData.goal);
+      projectData.append('end_date', formData.end_date);
       
+      // Add tags if selected
+      selectedTags.forEach(tagId => {
+        projectData.append('tags', tagId);
+      });
+      
+      const response = await api.post('/projects/', projectData);
+      
+      // Then upload the image
+      if (projectImage && response.data.slug) {
+        const imageData = new FormData();
+        imageData.append('image', projectImage);
+        imageData.append('is_featured', true);
+        
+        await api.post(`/projects/${response.data.slug}/upload_image/`, imageData);
+      }
+      
+      setSuccess(true);
       setTimeout(() => {
-        setSuccess(true);
-        setTimeout(() => {
-          navigate('/projects');
-        }, 2000);
-      }, 1000);
+        navigate(`/projects/${response.data.slug}`);
+      }, 2000);
     } catch (error) {
       console.error('Error creating project:', error);
       if (error.response && error.response.data) {
@@ -139,6 +210,14 @@ const CreateProject = () => {
       setLoading(false);
     }
   };
+
+  if (fetchingData) {
+    return (
+      <div className="d-flex justify-content-center align-items-center" style={{ height: '100vh' }}>
+        <Spinner animation="border" variant="primary" />
+      </div>
+    );
+  }
 
   return (
     <>
@@ -156,7 +235,7 @@ const CreateProject = () => {
               <Card.Body className="p-4">
                 {success && (
                   <Alert variant="success">
-                    Project created successfully! Redirecting...
+                    Project created successfully! Redirecting to your project page...
                   </Alert>
                 )}
                 
@@ -190,8 +269,8 @@ const CreateProject = () => {
                     >
                       <option value="">Select a category</option>
                       {categories.map(category => (
-                        <option key={category} value={category}>
-                          {category}
+                        <option key={category.id} value={category.id}>
+                          {category.name}
                         </option>
                       ))}
                     </Form.Select>
@@ -222,14 +301,14 @@ const CreateProject = () => {
                         <Form.Label>Funding Goal ($)</Form.Label>
                         <Form.Control
                           type="number"
-                          name="target_amount"
-                          value={formData.target_amount}
+                          name="goal"
+                          value={formData.goal}
                           onChange={handleChange}
                           placeholder="Enter amount"
-                          isInvalid={!!errors.target_amount}
+                          isInvalid={!!errors.goal}
                         />
                         <Form.Control.Feedback type="invalid">
-                          {errors.target_amount}
+                          {errors.goal}
                         </Form.Control.Feedback>
                       </Form.Group>
                     </Col>
@@ -251,21 +330,39 @@ const CreateProject = () => {
                   </Row>
 
                   <Form.Group className="mb-3">
-                    <Form.Label>Project Image URL</Form.Label>
+                    <Form.Label>Project Image</Form.Label>
                     <Form.Control
-                      type="text"
-                      name="image_url"
-                      value={formData.image_url}
-                      onChange={handleChange}
-                      placeholder="Enter image URL"
-                      isInvalid={!!errors.image_url}
+                      type="file"
+                      accept="image/*"
+                      onChange={handleImageChange}
+                      isInvalid={!!errors.image}
                     />
                     <Form.Control.Feedback type="invalid">
-                      {errors.image_url}
+                      {errors.image}
                     </Form.Control.Feedback>
                     <Form.Text className="text-muted">
-                      Provide a URL to an image that represents your project
+                      Upload a high-quality image that represents your project
                     </Form.Text>
+                    {imagePreview && (
+                      <ImagePreview src={imagePreview} alt="Project preview" />
+                    )}
+                  </Form.Group>
+
+                  <Form.Group className="mb-3">
+                    <Form.Label>Tags (Optional)</Form.Label>
+                    <div className="d-flex flex-wrap gap-3">
+                      {tags.map(tag => (
+                        <Form.Check
+                          key={tag.id}
+                          type="checkbox"
+                          id={`tag-${tag.id}`}
+                          label={tag.name}
+                          value={tag.id}
+                          onChange={handleTagChange}
+                          checked={selectedTags.includes(tag.id)}
+                        />
+                      ))}
+                    </div>
                   </Form.Group>
 
                   <div className="d-flex justify-content-end mt-4">
@@ -277,7 +374,19 @@ const CreateProject = () => {
                       Cancel
                     </Button>
                     <StyledButton type="submit" disabled={loading || success}>
-                      {loading ? 'Creating...' : 'Create Project'}
+                      {loading ? (
+                        <>
+                          <Spinner
+                            as="span"
+                            animation="border"
+                            size="sm"
+                            role="status"
+                            aria-hidden="true"
+                            className="me-2"
+                          />
+                          Creating...
+                        </>
+                      ) : 'Create Project'}
                     </StyledButton>
                   </div>
                 </Form>

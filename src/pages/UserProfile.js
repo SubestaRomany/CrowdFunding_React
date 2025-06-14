@@ -1,13 +1,11 @@
-import React, { useState, useEffect } from 'react';
-import { Container, Row, Col, Card, Form, Button, Alert, Nav, Tab } from 'react-bootstrap';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect, useContext } from 'react';
+import { Container, Row, Col, Form, Button, Alert, Card, Image } from 'react-bootstrap';
 import styled from 'styled-components';
-import axios from 'axios';
-import DonationHistory from '../components/DonationHistory';
-import ProjectCard from '../components/ProjectCard';
+import { AuthContext } from '../context/AuthContext';
+import api from '../services/api';
 
 const ProfileContainer = styled(Container)`
-  padding: 3rem 0;
+  padding: 4rem 0;
 `;
 
 const ProfileCard = styled(Card)`
@@ -15,68 +13,58 @@ const ProfileCard = styled(Card)`
   border-radius: 15px;
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
   overflow: hidden;
-  margin-bottom: 2rem;
 `;
 
-const ProfileHeader = styled(Card.Header)`
+const CardHeader = styled.div`
   background: linear-gradient(135deg, #4e54c8, #8f94fb);
   color: white;
-  padding: 1.5rem;
-  border: none;
+  padding: 2rem;
+  text-align: center;
 `;
 
-const ProfileTitle = styled.h4`
+const CardTitle = styled.h2`
   font-weight: 700;
-  margin-bottom: 0;
+  margin-bottom: 0.5rem;
 `;
 
-const ProfileImage = styled.div`
+const ProfileImage = styled(Image)`
   width: 150px;
   height: 150px;
-  border-radius: 50%;
-  overflow: hidden;
-  margin: 0 auto 2rem;
+  object-fit: cover;
   border: 5px solid white;
   box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
-`;
-
-const Avatar = styled.img`
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
+  margin-bottom: 1.5rem;
 `;
 
 const StyledButton = styled(Button)`
   background: linear-gradient(135deg, #4e54c8, #8f94fb);
   border: none;
   border-radius: 50px;
-  padding: 0.5rem 1.5rem;
+  padding: 0.75rem 2rem;
   font-weight: 600;
   transition: all 0.3s ease;
   
   &:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    transform: translateY(-3px);
+    box-shadow: 0 7px 15px rgba(0, 0, 0, 0.1);
   }
 `;
 
-const StyledNav = styled(Nav)`
-  margin-bottom: 2rem;
+const DangerButton = styled(Button)`
+  border-radius: 50px;
+  padding: 0.75rem 2rem;
+  font-weight: 600;
+  transition: all 0.3s ease;
   
-  .nav-link {
-    color: #495057;
-    font-weight: 600;
-    padding: 1rem 1.5rem;
-    
-    &.active {
-      color: #4e54c8;
-      border-bottom: 3px solid #4e54c8;
-    }
+  &:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 7px 15px rgba(0, 0, 0, 0.1);
   }
 `;
 
 const UserProfile = () => {
-  const [profile, setProfile] = useState({
+  const { user, logout, updateUser } = useContext(AuthContext);
+  const [profileData, setProfileData] = useState({
     email: '',
     username: '',
     first_name: '',
@@ -88,526 +76,355 @@ const UserProfile = () => {
     profile_picture: null
   });
   
-  const [donations, setDonations] = useState([]);
-  const [projects, setProjects] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [success, setSuccess] = useState(null);
-  const [imagePreview, setImagePreview] = useState(null);
-  const [newPassword, setNewPassword] = useState({
-    current_password: '',
-    new_password: '',
-    confirm_password: ''
-  });
-  
-  const navigate = useNavigate();
-  
+  const [newProfilePicture, setNewProfilePicture] = useState(null);
+  const [previewUrl, setPreviewUrl] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState({ text: '', type: '' });
+  const [deleteModalShow, setDeleteModalShow] = useState(false);
+  const [deletePassword, setDeletePassword] = useState('');
+
+  // Fetch user profile data
   useEffect(() => {
-    const fetchUserData = async () => {
-      setLoading(true);
+    const fetchUserProfile = async () => {
       try {
-        // In a real app, you would fetch from your API
-        // const profileResponse = await axios.get('/api/auth/profile/');
-        // const donationsResponse = await axios.get('/api/user/donations/');
-        // const projectsResponse = await axios.get('/api/user/projects/');
+        setLoading(true);
+        const response = await api.get('/profile/', {
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem('token')}`
+          }
+        });
         
-        // For demo purposes, we'll use mock data
-        setTimeout(() => {
-          setProfile({
-            email: 'user@example.com',
-            username: 'johndoe',
-            first_name: 'John',
-            last_name: 'Doe',
-            mobile_phone: '01012345678',
-            birthdate: '1990-01-01',
-            facebook_profile: 'https://facebook.com/johndoe',
-            country: 'Egypt',
-            profile_picture: 'https://randomuser.me/api/portraits/men/44.jpg'
-          });
-          
-          setDonations([
-            {
-              id: 1,
-              project: {
-                id: 101,
-                title: 'Eco-Friendly Water Bottle'
-              },
-              amount: 50.00,
-              date: '2023-06-15',
-              status: 'completed'
-            },
-            {
-              id: 2,
-              project: {
-                id: 102,
-                title: 'Sustainable Clothing Line'
-              },
-              amount: 75.00,
-              date: '2023-06-10',
-              status: 'completed'
-            },
-            {
-              id: 3,
-              project: {
-                id: 103,
-                title: 'Community Garden Project'
-              },
-              amount: 100.00,
-              date: '2023-06-05',
-              status: 'completed'
-            }
-          ]);
-          
-          setProjects([
-            {
-              id: 201,
-              title: 'Smart Home Energy Saver',
-              description: 'A device that helps reduce energy consumption in homes.',
-              current_amount: 5000,
-              goal_amount: 10000,
-              days_left: 15,
-              image_url: 'https://images.unsplash.com/photo-1558449028-b53a39d100fc?ixlib=rb-4.0.3&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&auto=format&fit=crop&w=1000&q=80'
-            }
-          ]);
-          
-          setLoading(false);
-        }, 1000);
-      } catch (err) {
-        console.error("Error fetching user data:", err);
-        setError("Failed to load user data. Please try again.");
+        setProfileData(response.data);
+        if (response.data.profile_picture) {
+          setPreviewUrl(response.data.profile_picture);
+        }
+      } catch (error) {
+        console.error('Error fetching profile:', error);
+        setMessage({
+          text: 'Failed to load profile data. Please try again.',
+          type: 'danger'
+        });
+      } finally {
         setLoading(false);
       }
     };
-    
-    fetchUserData();
-  }, []);
-  
-  const handleProfileChange = (e) => {
+
+    if (user) {
+      fetchUserProfile();
+    }
+  }, [user]);
+
+  const handleChange = (e) => {
     const { name, value } = e.target;
-    setProfile(prev => ({
+    setProfileData(prev => ({
       ...prev,
       [name]: value
     }));
   };
-  
-  const handleProfilePictureChange = (e) => {
+
+  const handleFileChange = (e) => {
     const file = e.target.files[0];
     if (file) {
-      setProfile(prev => ({
-        ...prev,
-        profile_picture: file
-      }));
-      
-      // Create a preview URL
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setImagePreview(reader.result);
-      };
-      reader.readAsDataURL(file);
+      setNewProfilePicture(file);
+      setPreviewUrl(URL.createObjectURL(file));
     }
   };
-  
-  const handlePasswordChange = (e) => {
-    const { name, value } = e.target;
-    setNewPassword(prev => ({
-      ...prev,
-      [name]: value
-    }));
-  };
-  
-  const handleProfileSubmit = async (e) => {
+
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
-    
+    setMessage({ text: '', type: '' });
+
     try {
-      // In a real app, you would update the profile via API
-      // const formData = new FormData();
-      // Object.keys(profile).forEach(key => {
-      //   formData.append(key, profile[key]);
-      // });
-      // await axios.put('/api/auth/profile/', formData);
+      // Create FormData to handle file upload
+      const formData = new FormData();
       
-      // For demo purposes, we'll just simulate a successful update
-      setTimeout(() => {
-        setSuccess("Profile updated successfully!");
-        setLoading(false);
-        
-        // Clear success message after 3 seconds
-        setTimeout(() => {
-          setSuccess(null);
-        }, 3000);
-      }, 1000);
-    } catch (err) {
-      console.error("Error updating profile:", err);
-      setError("Failed to update profile. Please try again.");
+      // Add all profile fields to FormData
+      Object.keys(profileData).forEach(key => {
+        if (key !== 'profile_picture' || (key === 'profile_picture' && profileData[key] !== null)) {
+          formData.append(key, profileData[key]);
+        }
+      });
+      
+      // Add new profile picture if selected
+      if (newProfilePicture) {
+        formData.append('profile_picture', newProfilePicture);
+      }
+
+      // Send update request to API
+      const response = await api.put('/profile/', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+          Authorization: `Bearer ${localStorage.getItem('token')}`
+        }
+      });
+
+      // Update local user data
+      updateUser(response.data);
+      
+      setMessage({
+        text: 'Profile updated successfully!',
+        type: 'success'
+      });
+    } catch (error) {
+      console.error('Error updating profile:', error);
+      
+      let errorMessage = 'Failed to update profile. Please try again.';
+      if (error.response && error.response.data) {
+        // Extract error messages from API response
+        const errors = error.response.data;
+        errorMessage = Object.keys(errors)
+          .map(key => `${key}: ${errors[key]}`)
+          .join(', ');
+      }
+      
+      setMessage({
+        text: errorMessage,
+        type: 'danger'
+      });
+    } finally {
       setLoading(false);
-      
-      // Clear error message after 3 seconds
-      setTimeout(() => {
-        setError(null);
-      }, 3000);
     }
   };
-  
-  const handlePasswordSubmit = async (e) => {
-    e.preventDefault();
-    
-    if (newPassword.new_password !== newPassword.confirm_password) {
-      setError("New passwords do not match.");
-      return;
-    }
-    
-    setLoading(true);
-    
-    try {
-      // In a real app, you would update the password via API
-      // await axios.post('/api/auth/change-password/', newPassword);
-      
-      // For demo purposes, we'll just simulate a successful update
-      setTimeout(() => {
-        setSuccess("Password changed successfully!");
-        setNewPassword({
-          current_password: '',
-          new_password: '',
-          confirm_password: ''
-        });
-        setLoading(false);
-        
-        // Clear success message after 3 seconds
-        setTimeout(() => {
-          setSuccess(null);
-        }, 3000);
-      }, 1000);
-    } catch (err) {
-      console.error("Error changing password:", err);
-      setError("Failed to change password. Please check your current password and try again.");
-      setLoading(false);
-      
-      // Clear error message after 3 seconds
-      setTimeout(() => {
-        setError(null);
-      }, 3000);
-    }
-  };
-  
+
   const handleDeleteAccount = async () => {
-    const confirmed = window.confirm(
-      "Are you sure you want to delete your account? This action cannot be undone."
-    );
-    
-    if (confirmed) {
+    try {
       setLoading(true);
       
-      try {
-        
-        setTimeout(() => {
-         
-          navigate('/');
-        }, 1000);
-      } catch (err) {
-        console.error("Error deleting account:", err);
-        setError("Failed to delete account. Please try again.");
-        setLoading(false);
+      await api.delete('/profile/delete/', {
+        data: { password: deletePassword },
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem('token')}`
+        }
+      });
+      
+      // Log out the user after successful deletion
+      logout();
+      
+      // Show success message (though user will be redirected)
+      setMessage({
+        text: 'Account deleted successfully.',
+        type: 'success'
+      });
+    } catch (error) {
+      console.error('Error deleting account:', error);
+      
+      let errorMessage = 'Failed to delete account. Please try again.';
+      if (error.response) {
+        if (error.response.status === 403) {
+          errorMessage = 'Incorrect password. Please try again.';
+        } else if (error.response.data && error.response.data.error) {
+          errorMessage = error.response.data.error;
+        }
       }
+      
+      setMessage({
+        text: errorMessage,
+        type: 'danger'
+      });
+    } finally {
+      setLoading(false);
+      setDeleteModalShow(false);
+      setDeletePassword('');
     }
   };
-  
-  if (loading && !profile.email) {
+
+  if (!user) {
     return (
       <ProfileContainer>
-        <div className="text-center py-5">
-          <div className="spinner-border text-primary" role="status">
-            <span className="visually-hidden">Loading...</span>
-          </div>
-          <p className="mt-3">Loading profile...</p>
-        </div>
+        <Alert variant="warning">
+          Please log in to view your profile.
+        </Alert>
       </ProfileContainer>
     );
   }
-  
+
   return (
     <ProfileContainer>
-      <Tab.Container defaultActiveKey="profile">
-        <Row>
-          <Col lg={3}>
-            <ProfileCard className="text-center">
-              <Card.Body>
-                <ProfileImage>
-                  <Avatar 
-                    src={imagePreview || profile.profile_picture || 'https://via.placeholder.com/150'} 
-                    alt={profile.username} 
-                  />
-                </ProfileImage>
-                <h4>{profile.first_name} {profile.last_name}</h4>
-                <p className="text-muted">@{profile.username}</p>
-                <p>{profile.email}</p>
-              </Card.Body>
-            </ProfileCard>
+      <Row className="justify-content-center">
+        <Col md={8} lg={7}>
+          <ProfileCard>
+            <CardHeader>
+              <ProfileImage 
+                src={previewUrl || 'https://via.placeholder.com/150'} 
+                roundedCircle 
+                alt="Profile" 
+              />
+              <CardTitle>{profileData.first_name} {profileData.last_name}</CardTitle>
+              <p>{profileData.email}</p>
+            </CardHeader>
             
-            <ProfileCard>
-              <Card.Body>
-                <StyledNav className="flex-column">
-                  <Nav.Link eventKey="profile">Profile Settings</Nav.Link>
-                  <Nav.Link eventKey="password">Change Password</Nav.Link>
-                  <Nav.Link eventKey="donations">My Donations</Nav.Link>
-                  <Nav.Link eventKey="projects">My Projects</Nav.Link>
-                </StyledNav>
+            <Card.Body className="p-4">
+              {message.text && (
+                <Alert variant={message.type}>
+                  {message.text}
+                </Alert>
+              )}
+              
+              <Form onSubmit={handleSubmit}>
+                <Row>
+                  <Col md={6}>
+                    <Form.Group className="mb-3">
+                      <Form.Label>First Name</Form.Label>
+                      <Form.Control
+                        type="text"
+                        name="first_name"
+                        value={profileData.first_name || ''}
+                        onChange={handleChange}
+                      />
+                    </Form.Group>
+                  </Col>
+                  
+                  <Col md={6}>
+                    <Form.Group className="mb-3">
+                      <Form.Label>Last Name</Form.Label>
+                      <Form.Control
+                        type="text"
+                        name="last_name"
+                        value={profileData.last_name || ''}
+                        onChange={handleChange}
+                      />
+                    </Form.Group>
+                  </Col>
+                </Row>
                 
-                <div className="d-grid gap-2 mt-4">
-                  <StyledButton 
+                <Form.Group className="mb-3">
+                  <Form.Label>Username</Form.Label>
+                  <Form.Control
+                    type="text"
+                    name="username"
+                    value={profileData.username || ''}
+                    onChange={handleChange}
+                  />
+                </Form.Group>
+                
+                <Form.Group className="mb-3">
+                  <Form.Label>Email</Form.Label>
+                  <Form.Control
+                    type="email"
+                    value={profileData.email || ''}
+                    disabled
+                  />
+                  <Form.Text className="text-muted">
+                    Email cannot be changed.
+                  </Form.Text>
+                </Form.Group>
+                
+                <Form.Group className="mb-3">
+                  <Form.Label>Mobile Phone</Form.Label>
+                  <Form.Control
+                    type="text"
+                    name="mobile_phone"
+                    value={profileData.mobile_phone || ''}
+                    onChange={handleChange}
+                  />
+                </Form.Group>
+                
+                <Form.Group className="mb-3">
+                  <Form.Label>Birthdate</Form.Label>
+                  <Form.Control
+                    type="date"
+                    name="birthdate"
+                    value={profileData.birthdate || ''}
+                    onChange={handleChange}
+                  />
+                </Form.Group>
+                
+                <Form.Group className="mb-3">
+                  <Form.Label>Facebook Profile</Form.Label>
+                  <Form.Control
+                    type="url"
+                    name="facebook_profile"
+                    value={profileData.facebook_profile || ''}
+                    onChange={handleChange}
+                    placeholder="https://facebook.com/yourusername"
+                  />
+                </Form.Group>
+                
+                <Form.Group className="mb-3">
+                  <Form.Label>Country</Form.Label>
+                  <Form.Control
+                    type="text"
+                    name="country"
+                    value={profileData.country || ''}
+                    onChange={handleChange}
+                  />
+                </Form.Group>
+                
+                <Form.Group className="mb-4">
+                  <Form.Label>Profile Picture</Form.Label>
+                  <Form.Control
+                    type="file"
+                    accept="image/*"
+                    onChange={handleFileChange}
+                  />
+                </Form.Group>
+                
+                <div className="d-flex justify-content-between">
+                  <StyledButton type="submit" disabled={loading}>
+                    {loading ? 'Saving...' : 'Save Changes'}
+                  </StyledButton>
+                  
+                  <DangerButton 
                     variant="danger" 
-                    onClick={handleDeleteAccount}
-                    disabled={loading}
+                    onClick={() => setDeleteModalShow(true)}
                   >
                     Delete Account
-                  </StyledButton>
+                  </DangerButton>
                 </div>
-              </Card.Body>
-            </ProfileCard>
-          </Col>
-          
-          <Col lg={9}>
-            {error && (
-              <Alert variant="danger" onClose={() => setError(null)} dismissible>
-                {error}
-              </Alert>
-            )}
-            
-            {success && (
-              <Alert variant="success" onClose={() => setSuccess(null)} dismissible>
-                {success}
-              </Alert>
-            )}
-            
-            <Tab.Content>
-              <Tab.Pane eventKey="profile">
-                <ProfileCard>
-                  <ProfileHeader>
-                    <ProfileTitle>Profile Settings</ProfileTitle>
-                  </ProfileHeader>
-                  <Card.Body>
-                    <Form onSubmit={handleProfileSubmit}>
-                      <Row>
-                        <Col md={6}>
-                          <Form.Group className="mb-3">
-                            <Form.Label>First Name</Form.Label>
-                            <Form.Control 
-                              type="text" 
-                              name="first_name"
-                              value={profile.first_name}
-                              onChange={handleProfileChange}
-                              required
-                            />
-                          </Form.Group>
-                        </Col>
-                        <Col md={6}>
-                          <Form.Group className="mb-3">
-                            <Form.Label>Last Name</Form.Label>
-                            <Form.Control 
-                              type="text" 
-                              name="last_name"
-                              value={profile.last_name}
-                              onChange={handleProfileChange}
-                              required
-                            />
-                          </Form.Group>
-                        </Col>
-                      </Row>
-                      
-                      <Row>
-                        <Col md={6}>
-                          <Form.Group className="mb-3">
-                            <Form.Label>Username</Form.Label>
-                            <Form.Control 
-                              type="text" 
-                              name="username"
-                              value={profile.username}
-                              onChange={handleProfileChange}
-                              required
-                            />
-                          </Form.Group>
-                        </Col>
-                        <Col md={6}>
-                          <Form.Group className="mb-3">
-                            <Form.Label>Email</Form.Label>
-                            <Form.Control 
-                              type="email" 
-                              value={profile.email}
-                              disabled
-                            />
-                            <Form.Text className="text-muted">
-                              Email cannot be changed.
-                            </Form.Text>
-                          </Form.Group>
-                        </Col>
-                      </Row>
-                      
-                      <Row>
-                        <Col md={6}>
-                          <Form.Group className="mb-3">
-                            <Form.Label>Mobile Phone</Form.Label>
-                            <Form.Control 
-                              type="tel" 
-                              name="mobile_phone"
-                              value={profile.mobile_phone}
-                              onChange={handleProfileChange}
-                              placeholder="01XXXXXXXXX"
-                            />
-                          </Form.Group>
-                        </Col>
-                        <Col md={6}>
-                          <Form.Group className="mb-3">
-                            <Form.Label>Birthdate</Form.Label>
-                            <Form.Control 
-                              type="date" 
-                              name="birthdate"
-                              value={profile.birthdate}
-                              onChange={handleProfileChange}
-                            />
-                          </Form.Group>
-                        </Col>
-                      </Row>
-                      
-                      <Row>
-                        <Col md={6}>
-                          <Form.Group className="mb-3">
-                            <Form.Label>Country</Form.Label>
-                            <Form.Control 
-                              type="text" 
-                              name="country"
-                              value={profile.country}
-                              onChange={handleProfileChange}
-                            />
-                          </Form.Group>
-                        </Col>
-                        <Col md={6}>
-                          <Form.Group className="mb-3">
-                            <Form.Label>Facebook Profile</Form.Label>
-                            <Form.Control 
-                              type="url" 
-                              name="facebook_profile"
-                              value={profile.facebook_profile}
-                              onChange={handleProfileChange}
-                              placeholder="https://facebook.com/username"
-                            />
-                          </Form.Group>
-                        </Col>
-                      </Row>
-                      
-                      <Form.Group className="mb-4">
-                        <Form.Label>Profile Picture</Form.Label>
-                        <Form.Control 
-                          type="file" 
-                          accept="image/*"
-                          onChange={handleProfilePictureChange}
-                        />
-                      </Form.Group>
-                      
-                      <div className="d-flex justify-content-end">
-                        <StyledButton 
-                          type="submit"
-                          disabled={loading}
-                        >
-                          {loading ? 'Saving...' : 'Save Changes'}
-                        </StyledButton>
-                      </div>
-                    </Form>
-                  </Card.Body>
-                </ProfileCard>
-              </Tab.Pane>
-              
-              <Tab.Pane eventKey="password">
-                <ProfileCard>
-                  <ProfileHeader>
-                    <ProfileTitle>Change Password</ProfileTitle>
-                  </ProfileHeader>
-                  <Card.Body>
-                    <Form onSubmit={handlePasswordSubmit}>
-                      <Form.Group className="mb-3">
-                        <Form.Label>Current Password</Form.Label>
-                        <Form.Control 
-                          type="password" 
-                          name="current_password"
-                          value={newPassword.current_password}
-                          onChange={handlePasswordChange}
-                          required
-                        />
-                      </Form.Group>
-                      
-                      <Form.Group className="mb-3">
-                        <Form.Label>New Password</Form.Label>
-                        <Form.Control 
-                          type="password" 
-                          name="new_password"
-                          value={newPassword.new_password}
-                          onChange={handlePasswordChange}
-                          required
-                        />
-                      </Form.Group>
-                      
-                      <Form.Group className="mb-4">
-                        <Form.Label>Confirm New Password</Form.Label>
-                        <Form.Control 
-                          type="password" 
-                          name="confirm_password"
-                          value={newPassword.confirm_password}
-                          onChange={handlePasswordChange}
-                          required
-                        />
-                      </Form.Group>
-                      
-                      <div className="d-flex justify-content-end">
-                        <StyledButton 
-                          type="submit"
-                          disabled={loading}
-                        >
-                          {loading ? 'Changing...' : 'Change Password'}
-                        </StyledButton>
-                      </div>
-                    </Form>
-                  </Card.Body>
-                </ProfileCard>
-              </Tab.Pane>
-              
-              <Tab.Pane eventKey="donations">
-                <DonationHistory donations={donations} />
-              </Tab.Pane>
-              
-              <Tab.Pane eventKey="projects">
-                <ProfileCard>
-                  <ProfileHeader className="d-flex justify-content-between align-items-center">
-                    <ProfileTitle>My Projects</ProfileTitle>
-                    <StyledButton 
-                      size="sm"
-                      onClick={() => navigate('/projects/create')}
-                    >
-                      Create New Project
-                    </StyledButton>
-                  </ProfileHeader>
-                  <Card.Body>
-                    {projects.length > 0 ? (
-                      <Row>
-                        {projects.map(project => (
-                          <Col md={6} key={project.id} className="mb-4">
-                            <ProjectCard project={project} />
-                          </Col>
-                        ))}
-                      </Row>
-                    ) : (
-                      <div className="text-center py-5">
-                        <p className="mb-3">You haven't created any projects yet.</p>
-                        <StyledButton onClick={() => navigate('/projects/create')}>
-                          Create Your First Project
-                        </StyledButton>
-                      </div>
-                    )}
-                  </Card.Body>
-                </ProfileCard>
-              </Tab.Pane>
-            </Tab.Content>
-          </Col>
-        </Row>
-      </Tab.Container>
+              </Form>
+            </Card.Body>
+          </ProfileCard>
+        </Col>
+      </Row>
+      
+      {/* Delete Account Modal */}
+      {deleteModalShow && (
+        <div className="modal show d-block" tabIndex="-1">
+          <div className="modal-dialog">
+            <div className="modal-content">
+              <div className="modal-header">
+                <h5 className="modal-title">Delete Account</h5>
+                <button 
+                  type="button" 
+                  className="btn-close" 
+                  onClick={() => setDeleteModalShow(false)}
+                ></button>
+              </div>
+              <div className="modal-body">
+                <p>Are you sure you want to delete your account? This action cannot be undone.</p>
+                <Form.Group>
+                  <Form.Label>Enter your password to confirm</Form.Label>
+                  <Form.Control
+                    type="password"
+                    value={deletePassword}
+                    onChange={(e) => setDeletePassword(e.target.value)}
+                    placeholder="Your password"
+                  />
+                </Form.Group>
+              </div>
+              <div className="modal-footer">
+                <Button 
+                  variant="secondary" 
+                  onClick={() => setDeleteModalShow(false)}
+                >
+                  Cancel
+                </Button>
+                <Button 
+                  variant="danger" 
+                  onClick={handleDeleteAccount}
+                  disabled={!deletePassword || loading}
+                >
+                  {loading ? 'Deleting...' : 'Delete Account'}
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* Modal backdrop */}
+      {deleteModalShow && <div className="modal-backdrop show"></div>}
     </ProfileContainer>
   );
 };

@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Container, Row, Col, Button, Card } from 'react-bootstrap';
 import { Link } from 'react-router-dom';
 import styled from 'styled-components';
-import axios from 'axios';
+import api from '../services/api';
 
 const HeroSection = styled.div`
   background: linear-gradient(135deg, #4e54c8, #8f94fb);
@@ -112,62 +112,72 @@ const Home = () => {
     totalFunding: 0,
     totalBackers: 0
   });
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
-    const fetchFeaturedProjects = async () => {
+    const fetchData = async () => {
+      setLoading(true);
       try {
-        const response = await axios.get('/api/projects/?featured=true');
-        setFeaturedProjects(response.data.slice(0, 3));
-      } catch (error) {
-        console.error('Error fetching featured projects:', error);
-       
-        setFeaturedProjects([
-          {
-            id: 1,
-            title: 'Eco-Friendly Water Bottle',
-            description: 'A sustainable water bottle that helps reduce plastic waste.',
-            image_url: 'https://images.unsplash.com/photo-1602143407151-7111542de6e8',
-            current_amount: 15000,
-            target_amount: 20000,
-          },
-          {
-            id: 2,
-            title: 'Smart Home Garden',
-            description: 'An automated garden system for growing herbs and vegetables indoors.',
-            image_url: 'https://images.unsplash.com/photo-1585320806297-9794b3e4eeae',
-            current_amount: 8000,
-            target_amount: 30000,
-          },
-          {
-            id: 3,
-            title: 'Educational Coding Kit for Kids',
-            description: 'A fun kit to teach programming basics to children aged 8-12.',
-            image_url: 'https://images.unsplash.com/photo-1603354350317-6f7aaa5911c5',
-            current_amount: 25000,
-            target_amount: 40000,
+        // Fetch featured projects - using status=active and sorting by progress
+        const projectsResponse = await api.get('/projects/', {
+          params: {
+            status: 'active',
+            ordering: '-progress_percentage',
+            limit: 3
           }
-        ]);
-      }
-    };
-
-    const fetchStats = async () => {
-      try {
-        const response = await axios.get('/api/stats/');
-        setStats(response.data);
-      } catch (error) {
-        console.error('Error fetching stats:', error);
-        
-        setStats({
-          totalProjects: 150,
-          totalFunding: 2500000,
-          totalBackers: 12000
         });
+        
+        setFeaturedProjects(projectsResponse.data.results || projectsResponse.data);
+        
+        // Fetch statistics
+        // Option 1: If you have a dedicated stats endpoint
+        try {
+          const statsResponse = await api.get('/stats/');
+          setStats(statsResponse.data);
+        } catch (statsError) {
+          console.log('Stats endpoint not available, calculating from projects');
+          
+          // Option 2: Calculate stats from all projects if no stats endpoint
+          const allProjectsResponse = await api.get('/projects/', {
+            params: { limit: 100 }
+          });
+          
+          const projects = allProjectsResponse.data.results || allProjectsResponse.data;
+          
+          // Calculate total funding
+          const totalFunding = projects.reduce((sum, project) => {
+            return sum + parseFloat(project.current_amount || 0);
+          }, 0);
+          
+          // Set stats based on projects data
+          setStats({
+            totalProjects: projects.length,
+            totalFunding: totalFunding,
+            totalBackers: projects.reduce((sum, p) => sum + (p.backers_count || 0), 0)
+          });
+        }
+        
+        setError(null);
+      } catch (err) {
+        console.error('Error fetching data:', err);
+        setError('Failed to load data. Please try again later.');
+      } finally {
+        setLoading(false);
       }
     };
 
-    fetchFeaturedProjects();
-    fetchStats();
+    fetchData();
   }, []);
+
+  // Get featured image for a project
+  const getFeaturedImage = (project) => {
+    if (project.images && project.images.length > 0) {
+      const featuredImage = project.images.find(img => img.is_featured);
+      return featuredImage ? featuredImage.image : project.images[0].image;
+    }
+    return 'https://via.placeholder.com/300x200?text=No+Image';
+  };
 
   return (
     <>
@@ -185,39 +195,68 @@ const Home = () => {
 
       <Container>
         <SectionTitle>Featured Projects</SectionTitle>
-        <Row>
-          {featuredProjects.map(project => (
-            <Col key={project.id} md={4} className="mb-4">
-              <ProjectCard>
-                <ProjectImage variant="top" src={project.image_url} />
-                <Card.Body>
-                  <Card.Title>{project.title}</Card.Title>
-                  <Card.Text>{project.description}</Card.Text>
-                  <ProgressBar>
-                    <Progress width={(project.current_amount / project.target_amount) * 100} />
-                  </ProgressBar>
-                  <div className="d-flex justify-content-between">
-                    <small>${project.current_amount.toLocaleString()} raised</small>
-                    <small>{Math.round((project.current_amount / project.target_amount) * 100)}%</small>
-                  </div>
-                  <Button 
-                    as={Link} 
-                    to={`/projects/${project.id}`}
-                    variant="primary" 
-                    className="w-100 mt-3"
-                  >
-                    View Project
-                  </Button>
-                </Card.Body>
-              </ProjectCard>
-            </Col>
-          ))}
-        </Row>
-        <div className="text-center mt-4 mb-5">
-          <StyledButton as={Link} to="/projects">
-            View All Projects
-          </StyledButton>
-        </div>
+        {loading ? (
+          <div className="text-center my-5">
+            <div className="spinner-border text-primary" role="status">
+              <span className="visually-hidden">Loading...</span>
+            </div>
+          </div>
+        ) : error ? (
+          <div className="alert alert-danger" role="alert">
+            {error}
+          </div>
+        ) : (
+          <>
+            <Row>
+              {featuredProjects.length > 0 ? (
+                featuredProjects.map(project => (
+                  <Col key={project.id} md={4} className="mb-4">
+                    <ProjectCard>
+                      <ProjectImage variant="top" src={getFeaturedImage(project)} />
+                      <Card.Body>
+                        <Card.Title>{project.title}</Card.Title>
+                        <Card.Text>
+                          {project.description.length > 100 
+                            ? `${project.description.substring(0, 100)}...` 
+                            : project.description}
+                        </Card.Text>
+                        <div className="mb-2">
+                          <span className="badge bg-light text-dark">
+                            {project.category ? project.category.name : 'Uncategorized'}
+                          </span>
+                        </div>
+                        <ProgressBar>
+                          <Progress width={project.progress_percentage || 0} />
+                        </ProgressBar>
+                        <div className="d-flex justify-content-between">
+                          <small>${parseFloat(project.current_amount || 0).toLocaleString()} raised</small>
+                          <small>{project.progress_percentage || 0}%</small>
+                        </div>
+                        <Button 
+                          as={Link} 
+                          to={`/projects/${project.slug}`}
+                          variant="primary" 
+                          className="w-100 mt-3"
+                        >
+                          View Project
+                        </Button>
+                      </Card.Body>
+                    </ProjectCard>
+                  </Col>
+                ))
+              ) : (
+                <div className="text-center my-4">
+                  <p>No featured projects available at the moment.</p>
+                </div>
+              )}
+            </Row>
+            <div className="text-center mt-4 mb-5">
+              <StyledButton as={Link} to="/projects">
+                View All Projects
+              </StyledButton>
+            </div>
+          </>
+        )}
       </Container>
 
       <StatSection>
@@ -228,11 +267,19 @@ const Home = () => {
               <StatText>Projects Funded</StatText>
             </Col>
             <Col md={4}>
-              <StatNumber>${(stats.totalFunding / 1000000).toFixed(1)}M+</StatNumber>
+              <StatNumber>
+                {stats.totalFunding >= 1000000 
+                  ? `$${(stats.totalFunding / 1000000).toFixed(1)}M+` 
+                  : `$${(stats.totalFunding / 1000).toFixed(1)}K+`}
+              </StatNumber>
               <StatText>Total Funding</StatText>
             </Col>
             <Col md={4}>
-              <StatNumber>{(stats.totalBackers / 1000).toFixed(1)}K+</StatNumber>
+              <StatNumber>
+                {stats.totalBackers >= 1000 
+                  ? `${(stats.totalBackers / 1000).toFixed(1)}K+` 
+                  : stats.totalBackers}
+              </StatNumber>
               <StatText>Total Backers</StatText>
             </Col>
           </Row>

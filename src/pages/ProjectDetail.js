@@ -1,10 +1,10 @@
 import { Container, Row, Col, Card, Badge, ProgressBar, Tab, Tabs, Button, Form } from 'react-bootstrap';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import styled from 'styled-components';
 import DonationForm from '../components/DonationForm';
-import axios from 'axios';
-import { useState, useEffect } from 'react';
-
+import api from '../services/api';
+import { useState, useEffect, useContext } from 'react';
+import { AuthContext } from '../context/AuthContext';
 
 const ProjectContainer = styled(Container)`
   padding: 3rem 0;
@@ -110,129 +110,102 @@ const CommentButton = styled(Button)`
 `;
 
 const ProjectDetail = () => {
-  const { id } = useParams();
+  const { slug } = useParams();
   const [project, setProject] = useState(null);
+  const [comments, setComments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [newComment, setNewComment] = useState('');
+  const { user } = useContext(AuthContext);
+  const navigate = useNavigate();
   
- 
+  // Fetch project details
   useEffect(() => {
     const fetchProject = async () => {
       setLoading(true);
       try {
-       
-        setTimeout(() => {
-          setProject({
-            id: id,
-            title: "Eco-Friendly Water Bottle",
-            description: "A reusable water bottle made from sustainable materials that helps reduce plastic waste.",
-            long_description: `
-              <p>Our mission is to reduce single-use plastic waste by creating the most sustainable, practical, and beautiful water bottle on the market.</p>
-              <p>Made from 100% recycled materials, our bottle is designed to last a lifetime. Each bottle features:</p>
-              <ul>
-                <li>Double-wall insulation to keep drinks cold for 24 hours or hot for 12 hours</li>
-                <li>Leak-proof cap with easy-carry handle</li>
-                <li>Wide mouth for easy filling and cleaning</li>
-                <li>Dishwasher safe design</li>
-                <li>Available in 6 beautiful colors</li>
-              </ul>
-              <p>By choosing our bottle, you're not just staying hydrated - you're helping to save our oceans and reduce landfill waste.</p>
-            `,
-            creator: {
-              id: 1,
-              name: "Sarah Johnson",
-              avatar: "https://randomuser.me/api/portraits/women/44.jpg",
-              bio: "Environmental activist and product designer"
-            },
-            category: "Eco-Friendly",
-            tags: ["Sustainable", "Eco", "Plastic-Free"],
-            current_amount: 8750,
-            goal_amount: 15000,
-            backers_count: 325,
-            days_left: 18,
-            start_date: "2023-05-01",
-            end_date: "2023-06-30",
-            image_url: "https://images.unsplash.com/photo-1602143407151-7111542de6e8?ixlib=rb-4.0.3&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&auto=format&fit=crop&w=1000&q=80",
-            updates: [
-              {
-                id: 1,
-                title: "Production Started!",
-                content: "We're excited to announce that production has officially begun on the first batch of bottles!",
-                date: "2023-05-15"
-              },
-              {
-                id: 2,
-                title: "New Color Options",
-                content: "Based on your feedback, we've added two new color options: Sunset Orange and Ocean Blue.",
-                date: "2023-05-10"
-              }
-            ],
-            comments: [
-              {
-                id: 1,
-                user: {
-                  name: "Michael Chen",
-                  avatar: "https://randomuser.me/api/portraits/men/32.jpg"
-                },
-                content: "This looks amazing! Can't wait to get mine.",
-                date: "2023-05-12"
-              },
-              {
-                id: 2,
-                user: {
-                  name: "Emma Wilson",
-                  avatar: "https://randomuser.me/api/portraits/women/22.jpg"
-                },
-                content: "Will there be a smaller size available for kids?",
-                date: "2023-05-11"
-              }
-            ]
-          });
-          setLoading(false);
-        }, 1000);
+        // Get project details
+        const response = await api.get(`/projects/${slug}/`);
+        setProject(response.data);
+        
+        // Get project comments
+        const commentsResponse = await api.get(`/comments/`, {
+          params: { project: response.data.id }
+        });
+        setComments(commentsResponse.data);
+        
+        setError(null);
       } catch (err) {
         console.error("Error fetching project:", err);
         setError("Failed to load project details. Please try again.");
+      } finally {
         setLoading(false);
       }
     };
     
     fetchProject();
-  }, [id]);
+  }, [slug]);
   
   const handleDonationComplete = (amount) => {
-   
+    // Update project stats after successful donation
     setProject(prev => ({
       ...prev,
-      current_amount: prev.current_amount + amount,
-      backers_count: prev.backers_count + 1
+      current_amount: (parseFloat(prev.current_amount) + parseFloat(amount)).toFixed(2),
+      progress_percentage: Math.min(
+        ((parseFloat(prev.current_amount) + parseFloat(amount)) / parseFloat(prev.goal)) * 100, 
+        100
+      ).toFixed(2)
     }));
   };
   
-  const handleCommentSubmit = (e) => {
+  const handleCommentSubmit = async (e) => {
     e.preventDefault();
     
     if (!newComment.trim()) return;
     
+    if (!user) {
+      navigate('/login', { state: { from: `/projects/${slug}` } });
+      return;
+    }
     
-    const newCommentObj = {
-      id: Date.now(), 
-      user: {
-        name: "You", 
-        avatar: "https://randomuser.me/api/portraits/lego/1.jpg" // placeholder avatar
-      },
-      content: newComment,
-      date: new Date().toISOString().split('T')[0]
-    };
-    
-    setProject(prev => ({
-      ...prev,
-      comments: [newCommentObj, ...prev.comments]
-    }));
-    
-    
-    setNewComment('');
+    try {
+      // Post comment to API
+      const response = await api.post('/comments/', {
+        project: project.id,
+        content: newComment
+      }, {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem('token')}`
+        }
+      });
+      
+      // Add new comment to the list
+      setComments([response.data, ...comments]);
+      
+      // Clear comment form
+      setNewComment('');
+    } catch (error) {
+      console.error("Error posting comment:", error);
+      alert("Failed to post comment. Please try again.");
+    }
+  };
+  
+  // Calculate days left
+  const calculateDaysLeft = (endDate) => {
+    const end = new Date(endDate);
+    const now = new Date();
+    const diffTime = end - now;
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    return diffDays > 0 ? diffDays : 0;
+  };
+  
+  // Get featured image
+  const getFeaturedImage = (project) => {
+    if (project.images && project.images.length > 0) {
+      const featuredImage = project.images.find(img => img.is_featured);
+      return featuredImage ? featuredImage.image : project.images[0].image;
+    }
+    return 'https://via.placeholder.com/800x400?text=No+Image';
   };
   
   if (loading) {
@@ -278,101 +251,115 @@ const ProjectDetail = () => {
     );
   }
   
-  const progressPercentage = Math.min((project.current_amount / project.goal_amount) * 100, 100);
+  const daysLeft = calculateDaysLeft(project.end_date);
   
   return (
     <ProjectContainer>
       <Row>
         <Col lg={8}>
-          <ProjectImage src={project.image_url} alt={project.title} />
+          <ProjectImage src={getFeaturedImage(project)} alt={project.title} />
           <ProjectTitle>{project.title}</ProjectTitle>
           
           <ProjectCreator>
-            <CreatorAvatar src={project.creator.avatar} alt={project.creator.name} />
+            <CreatorAvatar 
+              src={project.owner.profile_picture || 'https://via.placeholder.com/50'} 
+              alt={project.owner.username} 
+            />
             <CreatorInfo>
-              <CreatorName>By {project.creator.name}</CreatorName>
-              <CreatorBio>{project.creator.bio}</CreatorBio>
+              <CreatorName>By {project.owner.username}</CreatorName>
+              <CreatorBio>{project.owner.bio || 'Project Creator'}</CreatorBio>
             </CreatorInfo>
           </ProjectCreator>
           
           <div className="mb-4">
-            <CategoryBadge>{project.category}</CategoryBadge>
-            {project.tags.map((tag, index) => (
+            {project.category && (
+              <CategoryBadge>{project.category.name}</CategoryBadge>
+            )}
+            {project.tags && project.tags.map((tag) => (
               <Badge 
-                key={index} 
+                key={tag.id} 
                 bg="light" 
                 text="dark" 
                 className="me-2"
                 style={{ borderRadius: '50px', padding: '0.5rem 1rem' }}
               >
-                {tag}
+                {tag.name}
               </Badge>
             ))}
           </div>
           
           <StyledTabs defaultActiveKey="about" className="mb-4">
             <Tab eventKey="about" title="About">
-              <div dangerouslySetInnerHTML={{ __html: project.long_description }} />
+              <div dangerouslySetInnerHTML={{ __html: project.description }} />
             </Tab>
             
-            <Tab eventKey="updates" title={`Updates (${project.updates.length})`}>
-              {project.updates.map(update => (
-                <StyledCard key={update.id} className="mb-4">
-                  <Card.Body>
-                    <h5>{update.title}</h5>
-                    <p className="text-muted">{new Date(update.date).toLocaleDateString()}</p>
-                    <p>{update.content}</p>
-                  </Card.Body>
-                </StyledCard>
-              ))}
+            <Tab eventKey="updates" title="Updates">
+              {project.updates && project.updates.length > 0 ? (
+                project.updates.map(update => (
+                  <StyledCard key={update.id} className="mb-4">
+                    <Card.Body>
+                      <h5>{update.title}</h5>
+                      <p className="text-muted">{new Date(update.created_at).toLocaleDateString()}</p>
+                      <p>{update.content}</p>
+                    </Card.Body>
+                  </StyledCard>
+                ))
+              ) : (
+                <p className="text-muted">No updates yet.</p>
+              )}
             </Tab>
             
-            <Tab eventKey="comments" title={`Comments (${project.comments.length})`}>
+            <Tab eventKey="comments" title={`Comments (${comments.length})`}>
               <CommentForm onSubmit={handleCommentSubmit}>
                 <Form.Group className="mb-3">
                   <Form.Label>Add a comment</Form.Label>
                   <Form.Control 
                     as="textarea" 
                     rows={3} 
-                    placeholder="Share your thoughts..."
+                    placeholder={user ? "Share your thoughts..." : "Please login to comment"}
                     value={newComment}
                     onChange={(e) => setNewComment(e.target.value)}
+                    disabled={!user}
                   />
                 </Form.Group>
                 <div className="d-flex justify-content-end">
-                  <CommentButton type="submit">
-                    Post Comment
+                  <CommentButton type="submit" disabled={!user}>
+                    {user ? "Post Comment" : "Login to Comment"}
                   </CommentButton>
                 </div>
               </CommentForm>
               
               <hr className="my-4" />
               
-              {project.comments.map(comment => (
-                <StyledCard key={comment.id} className="mb-3">
-                  <Card.Body>
-                    <div className="d-flex mb-3">
-                      <img 
-                        src={comment.user.avatar} 
-                        alt={comment.user.name} 
-                        style={{ 
-                          width: '40px', 
-                          height: '40px', 
-                          borderRadius: '50%',
-                          marginRight: '1rem'
-                        }} 
-                      />
-                      <div>
-                        <h6 className="mb-0">{comment.user.name}</h6>
-                        <small className="text-muted">
-                          {new Date(comment.date).toLocaleDateString()}
-                        </small>
+              {comments.length > 0 ? (
+                comments.map(comment => (
+                  <StyledCard key={comment.id} className="mb-3">
+                    <Card.Body>
+                      <div className="d-flex mb-3">
+                        <img 
+                          src={comment.user.profile_picture || 'https://via.placeholder.com/40'} 
+                          alt={comment.user.username} 
+                          style={{ 
+                            width: '40px', 
+                            height: '40px', 
+                            borderRadius: '50%',
+                            marginRight: '1rem'
+                          }} 
+                        />
+                        <div>
+                          <h6 className="mb-0">{comment.user.username}</h6>
+                          <small className="text-muted">
+                            {new Date(comment.created_at).toLocaleDateString()}
+                          </small>
+                        </div>
                       </div>
-                    </div>
-                    <p className="mb-0">{comment.content}</p>
-                  </Card.Body>
-                </StyledCard>
-              ))}
+                      <p className="mb-0">{comment.content}</p>
+                    </Card.Body>
+                  </StyledCard>
+                ))
+              ) : (
+                <p className="text-muted">No comments yet. Be the first to comment!</p>
+              )}
             </Tab>
           </StyledTabs>
         </Col>
@@ -381,21 +368,30 @@ const ProjectDetail = () => {
           <StyledCard className="mb-4">
             <Card.Body className="p-4">
               <div className="d-flex justify-content-between mb-2">
-                <h4 className="mb-0">${project.current_amount.toLocaleString()}</h4>
-                <span className="text-muted">of ${project.goal_amount.toLocaleString()}</span>
+                <h4 className="mb-0">${parseFloat(project.current_amount || 0).toLocaleString()}</h4>
+                <span className="text-muted">of ${parseFloat(project.goal).toLocaleString()}</span>
               </div>
               
-              <StyledProgressBar now={progressPercentage} />
+              <StyledProgressBar now={project.progress_percentage || 0} />
               
               <div className="d-flex justify-content-between mb-4">
                 <div>
-                  <h5 className="mb-0">{project.backers_count}</h5>
+                  <h5 className="mb-0">{project.backers_count || 0}</h5>
                   <small className="text-muted">Backers</small>
                 </div>
                 <div>
-                  <h5 className="mb-0">{project.days_left}</h5>
+                  <h5 className="mb-0">{daysLeft}</h5>
                   <small className="text-muted">Days left</small>
                 </div>
+              </div>
+              
+              <div className="d-flex justify-content-between text-muted small mb-2">
+                <span>Start Date</span>
+                <span>{new Date(project.start_date).toLocaleDateString()}</span>
+              </div>
+              <div className="d-flex justify-content-between text-muted small">
+                <span>End Date</span>
+                <span>{new Date(project.end_date).toLocaleDateString()}</span>
               </div>
             </Card.Body>
           </StyledCard>
@@ -404,7 +400,7 @@ const ProjectDetail = () => {
             projectId={project.id}
             projectTitle={project.title}
             currentAmount={project.current_amount}
-            goalAmount={project.goal_amount}
+            goalAmount={project.goal}
             onDonationComplete={handleDonationComplete}
           />
           
@@ -416,6 +412,7 @@ const ProjectDetail = () => {
                   variant="outline-primary" 
                   className="me-2"
                   style={{ borderRadius: '50%', width: '40px', height: '40px', padding: '0' }}
+                  onClick={() => window.open(`https://www.facebook.com/sharer/sharer.php?u=${window.location.href}`, '_blank')}
                 >
                   <i className="fab fa-facebook-f"></i>
                 </Button>
@@ -423,6 +420,7 @@ const ProjectDetail = () => {
                   variant="outline-info" 
                   className="me-2"
                   style={{ borderRadius: '50%', width: '40px', height: '40px', padding: '0' }}
+                  onClick={() => window.open(`https://twitter.com/intent/tweet?url=${window.location.href}&text=Check out this project: ${project.title}`, '_blank')}
                 >
                   <i className="fab fa-twitter"></i>
                 </Button>
@@ -430,18 +428,34 @@ const ProjectDetail = () => {
                   variant="outline-danger" 
                   className="me-2"
                   style={{ borderRadius: '50%', width: '40px', height: '40px', padding: '0' }}
+                  onClick={() => window.open(`https://pinterest.com/pin/create/button/?url=${window.location.href}&media=${getFeaturedImage(project)}&description=${project.title}`, '_blank')}
                 >
                   <i className="fab fa-pinterest"></i>
                 </Button>
                 <Button 
                   variant="outline-secondary"
                   style={{ borderRadius: '50%', width: '40px', height: '40px', padding: '0' }}
+                  onClick={() => {
+                    navigator.clipboard.writeText(window.location.href);
+                    alert('Link copied to clipboard!');
+                  }}
                 >
                   <i className="fas fa-link"></i>
                 </Button>
               </div>
             </Card.Body>
           </StyledCard>
+          
+          {/* Report Project Button */}
+          {user && (
+            <Button 
+              variant="outline-danger" 
+              className="w-100 mt-3"
+              onClick={() => navigate(`/report/project/${project.id}`)}
+            >
+              Report Project
+            </Button>
+          )}
         </Col>
       </Row>
     </ProjectContainer>

@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Container, Row, Col, Form, Button, Alert, Card } from 'react-bootstrap';
 import { Link, useNavigate } from 'react-router-dom';
 import styled from 'styled-components';
-import axios from 'axios';
+import api from '../services/api';
 
 const RegisterContainer = styled(Container)`
   padding: 4rem 0;
@@ -51,9 +51,12 @@ const StyledButton = styled(Button)`
 const Register = () => {
   const [formData, setFormData] = useState({
     username: '',
+    first_name: '',
+    last_name: '',
     email: '',
     password: '',
-    confirmPassword: ''
+    confirm_password: '',
+    mobile_phone: ''
   });
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
@@ -87,8 +90,14 @@ const Register = () => {
       newErrors.password = 'Password must be at least 6 characters';
     }
     
-    if (formData.password !== formData.confirmPassword) {
-      newErrors.confirmPassword = 'Passwords do not match';
+    if (formData.password !== formData.confirm_password) {
+      newErrors.confirm_password = 'Passwords do not match';
+    }
+    
+    if (!formData.mobile_phone) {
+      newErrors.mobile_phone = 'Mobile phone is required';
+    } else if (!/^01[0125][0-9]{8}$/.test(formData.mobile_phone)) {
+      newErrors.mobile_phone = 'Phone number must be Egyptian and in the format: 01XXXXXXXXX';
     }
     
     setErrors(newErrors);
@@ -105,17 +114,53 @@ const Register = () => {
     setLoading(true);
     
     try {
+      // Create the request payload matching your Django API expectations
+      const userData = {
+        username: formData.username,
+        first_name: formData.first_name,
+        last_name: formData.last_name,
+        email: formData.email,
+        password: formData.password,
+        confirm_password: formData.confirm_password,
+        mobile_phone: formData.mobile_phone
+      };
       
+      // Make the API call to your Django registration endpoint
+      const response = await api.post('/register/', userData);
+      
+      // If successful, show success message
+      setSuccess(true);
+      console.log('Registration successful:', response.data);
+      
+      // Show a message about email verification
+      setErrors({
+        general: 'Registration successful! Please check your email to verify your account.'
+      });
+      
+      // Redirect to login page after a delay
       setTimeout(() => {
-        setSuccess(true);
-        setTimeout(() => {
-          navigate('/login');
-        }, 2000);
-      }, 1000);
+        navigate('/login');
+      }, 5000);
     } catch (error) {
       console.error('Registration error:', error);
+      
+      // Handle API error responses
       if (error.response && error.response.data) {
-        setErrors(error.response.data);
+        // Map Django validation errors to form fields
+        const apiErrors = {};
+        
+        // Handle different error formats from Django
+        if (error.response.data.errors) {
+          Object.entries(error.response.data.errors).forEach(([key, value]) => {
+            apiErrors[key] = Array.isArray(value) ? value[0] : value;
+          });
+        } else {
+          Object.entries(error.response.data).forEach(([key, value]) => {
+            apiErrors[key] = Array.isArray(value) ? value[0] : value;
+          });
+        }
+        
+        setErrors(apiErrors);
       } else {
         setErrors({ general: 'Registration failed. Please try again.' });
       }
@@ -136,12 +181,12 @@ const Register = () => {
             <Card.Body className="p-4">
               {success && (
                 <Alert variant="success">
-                  Registration successful! Redirecting to login...
+                  Registration successful! Please check your email to verify your account.
                 </Alert>
               )}
               
               {errors.general && (
-                <Alert variant="danger">{errors.general}</Alert>
+                <Alert variant={success ? "info" : "danger"}>{errors.general}</Alert>
               )}
               
               <Form onSubmit={handleSubmit}>
@@ -160,6 +205,41 @@ const Register = () => {
                   </Form.Control.Feedback>
                 </Form.Group>
 
+                <Row>
+                  <Col md={6}>
+                    <Form.Group className="mb-3">
+                      <Form.Label>First Name</Form.Label>
+                      <Form.Control
+                        type="text"
+                        name="first_name"
+                        value={formData.first_name}
+                        onChange={handleChange}
+                        placeholder="First name"
+                        isInvalid={!!errors.first_name}
+                      />
+                      <Form.Control.Feedback type="invalid">
+                        {errors.first_name}
+                      </Form.Control.Feedback>
+                    </Form.Group>
+                  </Col>
+                  <Col md={6}>
+                    <Form.Group className="mb-3">
+                      <Form.Label>Last Name</Form.Label>
+                      <Form.Control
+                        type="text"
+                        name="last_name"
+                        value={formData.last_name}
+                        onChange={handleChange}
+                        placeholder="Last name"
+                        isInvalid={!!errors.last_name}
+                      />
+                      <Form.Control.Feedback type="invalid">
+                        {errors.last_name}
+                      </Form.Control.Feedback>
+                    </Form.Group>
+                  </Col>
+                </Row>
+
                 <Form.Group className="mb-3">
                   <Form.Label>Email</Form.Label>
                   <Form.Control
@@ -172,6 +252,21 @@ const Register = () => {
                   />
                   <Form.Control.Feedback type="invalid">
                     {errors.email}
+                  </Form.Control.Feedback>
+                </Form.Group>
+
+                <Form.Group className="mb-3">
+                  <Form.Label>Mobile Phone</Form.Label>
+                  <Form.Control
+                    type="text"
+                    name="mobile_phone"
+                    value={formData.mobile_phone}
+                    onChange={handleChange}
+                    placeholder="Egyptian mobile number (01XXXXXXXXX)"
+                    isInvalid={!!errors.mobile_phone}
+                  />
+                  <Form.Control.Feedback type="invalid">
+                    {errors.mobile_phone}
                   </Form.Control.Feedback>
                 </Form.Group>
 
@@ -194,14 +289,14 @@ const Register = () => {
                   <Form.Label>Confirm Password</Form.Label>
                   <Form.Control
                     type="password"
-                    name="confirmPassword"
-                    value={formData.confirmPassword}
+                    name="confirm_password"
+                    value={formData.confirm_password}
                     onChange={handleChange}
                     placeholder="Confirm your password"
-                    isInvalid={!!errors.confirmPassword}
+                    isInvalid={!!errors.confirm_password}
                   />
                   <Form.Control.Feedback type="invalid">
-                    {errors.confirmPassword}
+                    {errors.confirm_password}
                   </Form.Control.Feedback>
                 </Form.Group>
 
