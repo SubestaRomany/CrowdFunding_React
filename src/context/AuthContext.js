@@ -1,16 +1,13 @@
 import React, { createContext, useState, useEffect, useContext, useCallback } from 'react';
 import axios from 'axios';
 
-// 0. إنشاء السياق
 export const AuthContext = createContext();
 
-// 0. hook مخصص للوصول للسياق
+
 export const useAuth = () => useContext(AuthContext);
 
-// 0. رابط API
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000/api/';
 
-// 0. إنشاء axios instance
 const api = axios.create({
   baseURL: API_URL,
   headers: {
