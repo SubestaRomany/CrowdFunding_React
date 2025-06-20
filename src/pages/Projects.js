@@ -92,7 +92,7 @@ const Projects = () => {
         setCategories(categoryNames);
         
         // Then fetch projects
-        const projectsResponse = await api.get('/projects/');
+        const projectsResponse = await api.get('/project/');
         setProjects(projectsResponse.data);
         setError('');
       } catch (error) {

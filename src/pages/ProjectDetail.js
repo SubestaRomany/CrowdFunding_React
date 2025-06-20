@@ -175,7 +175,7 @@ const ProjectDetail = () => {
         content: newComment
       }, {
         headers: {
-          Authorization: `Bearer ${localStorage.getItem('token')}`
+          Authorization: `Token ${localStorage.getItem('token')}`
         }
       });
       

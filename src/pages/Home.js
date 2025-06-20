@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom';
 import styled from 'styled-components';
 import api from '../services/api';
 
-const HeroSection = styled.div`
+const HeroSection = styled.section`
   background: linear-gradient(135deg, #4e54c8, #8f94fb);
   color: white;
   padding: 5rem 0;
@@ -35,7 +35,6 @@ const StyledButton = styled(Button)`
   border: none;
   box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
   transition: all 0.3s ease;
-  
   &:hover {
     transform: translateY(-3px);
     box-shadow: 0 7px 15px rgba(0, 0, 0, 0.2);
@@ -59,7 +58,6 @@ const ProjectCard = styled(Card)`
   transition: all 0.3s ease;
   box-shadow: 0 5px 15px rgba(0, 0, 0, 0.05);
   height: 100%;
-  
   &:hover {
     transform: translateY(-10px);
     box-shadow: 0 15px 30px rgba(0, 0, 0, 0.1);
@@ -86,7 +84,7 @@ const Progress = styled.div`
   border-radius: 5px;
 `;
 
-const StatSection = styled.div`
+const StatSection = styled.section`
   background-color: #f8f9fa;
   padding: 5rem 0;
   margin: 3rem 0;
@@ -107,11 +105,7 @@ const StatText = styled.p`
 
 const Home = () => {
   const [featuredProjects, setFeaturedProjects] = useState([]);
-  const [stats, setStats] = useState({
-    totalProjects: 0,
-    totalFunding: 0,
-    totalBackers: 0
-  });
+  const [stats, setStats] = useState({ totalProjects: 0, totalFunding: 0, totalBackers: 0 });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -119,45 +113,18 @@ const Home = () => {
     const fetchData = async () => {
       setLoading(true);
       try {
-        // Fetch featured projects - using status=active and sorting by progress
-        const projectsResponse = await api.get('/projects/', {
-          params: {
-            status: 'active',
-            ordering: '-progress_percentage',
-            limit: 3
-          }
+        const { data: featuredData } = await api.get('/project/', {
+          params: { status: 'active', ordering: '-progress_percentage', limit: 3 },
         });
-        
-        setFeaturedProjects(projectsResponse.data.results || projectsResponse.data);
-        
-        // Fetch statistics
-        // Option 1: If you have a dedicated stats endpoint
-        try {
-          const statsResponse = await api.get('/stats/');
-          setStats(statsResponse.data);
-        } catch (statsError) {
-          console.log('Stats endpoint not available, calculating from projects');
-          
-          // Option 2: Calculate stats from all projects if no stats endpoint
-          const allProjectsResponse = await api.get('/projects/', {
-            params: { limit: 100 }
-          });
-          
-          const projects = allProjectsResponse.data.results || allProjectsResponse.data;
-          
-          // Calculate total funding
-          const totalFunding = projects.reduce((sum, project) => {
-            return sum + parseFloat(project.current_amount || 0);
-          }, 0);
-          
-          // Set stats based on projects data
-          setStats({
-            totalProjects: projects.length,
-            totalFunding: totalFunding,
-            totalBackers: projects.reduce((sum, p) => sum + (p.backers_count || 0), 0)
-          });
-        }
-        
+        setFeaturedProjects(featuredData.results || featuredData);
+
+        const { data: allData } = await api.get('/project/', { params: { limit: 100 } });
+        const allProjects = allData.results || allData;
+
+        const totalFunding = allProjects.reduce((sum, p) => sum + parseFloat(p.current_amount || 0), 0);
+        const totalBackers = allProjects.reduce((sum, p) => sum + (p.backers_count || 0), 0);
+
+        setStats({ totalProjects: allProjects.length, totalFunding, totalBackers });
         setError(null);
       } catch (err) {
         console.error('Error fetching data:', err);
@@ -170,15 +137,13 @@ const Home = () => {
     fetchData();
   }, []);
 
-  // Get featured image for a project
   const getFeaturedImage = (project) => {
     if (project.images && project.images.length > 0) {
-      const featuredImage = project.images.find(img => img.is_featured);
-      return featuredImage ? featuredImage.image : project.images[0].image;
+      const featured = project.images.find(img => img.is_featured);
+      return featured ? featured.image : project.images[0].image;
     }
     return 'https://via.placeholder.com/300x200?text=No+Image';
   };
-
   return (
     <>
       <HeroSection>
@@ -187,7 +152,7 @@ const Home = () => {
           <HeroSubtitle>
             Join our community of creators and backers to bring innovative projects to life.
           </HeroSubtitle>
-          <StyledButton as={Link} to="/projects">
+          <StyledButton as={Link} to="/project">
             Explore Projects
           </StyledButton>
         </Container>

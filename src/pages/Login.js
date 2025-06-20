@@ -1,9 +1,9 @@
-import React, { useState, useContext } from 'react';
+import React, { useState } from 'react';
 import { Container, Row, Col, Form, Button, Alert, Card } from 'react-bootstrap';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import styled from 'styled-components';
-import { AuthContext } from '../context/AuthContext';
 import api from '../services/api';
+import { useAuth } from '../context/AuthContext';
 
 const LoginContainer = styled(Container)`
   padding: 4rem 0;
@@ -50,67 +50,57 @@ const StyledButton = styled(Button)`
 `;
 
 const Login = () => {
-  const [formData, setFormData] = useState({
-    email: '',
-    password: ''
-  });
+  const [formData, setFormData] = useState({ email: '', password: '' });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  
-  const { login } = useContext(AuthContext);
+
+  const { login } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  
   const from = location.state?.from?.pathname || '/';
 
   const handleChange = (e) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value
-    });
+    setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
+
     if (!formData.email.trim() || !formData.password) {
       setError('Please enter both email and password');
       return;
     }
-    
+
     setLoading(true);
     setError('');
-    
+
     try {
-      // Make API call to Django login endpoint
-      const response = await api.post('/login/', {
+      const response = await api.post('/auth/login/', {
         email: formData.email,
-        password: formData.password
+        password: formData.password,
       });
-      
-      // Extract user data and token from response
-      const { user, msg } = response.data;
-      
-      // Store token in localStorage (assuming your AuthContext handles this)
+
+      const { token, user } = response.data;
+      console.log("login response:", response.data);
+
+      localStorage.setItem('token', token || user.token);
+
       await login({
+        email: formData.email,
+        password: formData.password,
         user: user,
-        token: user.token || localStorage.getItem('token') // Use token if available
+        token: token || user.token,
       });
-      
-      console.log(msg); // Log success message
-      
-      // Navigate to the page user was trying to access, or home
+
       navigate(from, { replace: true });
     } catch (error) {
       console.error('Login error:', error);
-      
-      // Handle different error responses from Django
       if (error.response) {
         if (error.response.status === 401) {
           setError('Invalid email or password');
-        } else if (error.response.data && error.response.data.error) {
+        } else if (error.response.data?.error) {
           setError(error.response.data.error);
-        } else if (error.response.data && error.response.data.non_field_errors) {
+        } else if (error.response.data?.non_field_errors) {
           setError(error.response.data.non_field_errors[0]);
         } else {
           setError('Login failed. Please try again.');
@@ -133,10 +123,7 @@ const Login = () => {
               <CardSubtitle>Sign in to your account</CardSubtitle>
             </CardHeader>
             <Card.Body className="p-4">
-              {error && (
-                <Alert variant="danger">{error}</Alert>
-              )}
-              
+              {error && <Alert variant="danger">{error}</Alert>}
               <Form onSubmit={handleSubmit}>
                 <Form.Group className="mb-3">
                   <Form.Label>Email</Form.Label>
@@ -163,28 +150,21 @@ const Login = () => {
                 </Form.Group>
 
                 <Form.Group className="mb-3">
-                  <Form.Check
-                    type="checkbox"
-                    label="Remember me"
-                  />
+                  <Form.Check type="checkbox" label="Remember me" />
                 </Form.Group>
 
                 <StyledButton type="submit" disabled={loading}>
                   {loading ? 'Signing In...' : 'Sign In'}
                 </StyledButton>
               </Form>
-              
+
               <div className="text-center mt-4">
                 <p>
                   Don't have an account?{' '}
-                  <Link to="/register" className="text-primary">
-                    Create one
-                  </Link>
+                  <Link to="/register" className="text-primary">Create one</Link>
                 </p>
                 <p>
-                  <Link to="/forgot-password" className="text-muted">
-                    Forgot your password?
-                  </Link>
+                  <Link to="/forgot-password" className="text-muted">Forgot your password?</Link>
                 </p>
               </div>
             </Card.Body>

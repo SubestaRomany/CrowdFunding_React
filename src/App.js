@@ -63,13 +63,18 @@ function AppContent() {
   useEffect(() => {
     const checkAuthStatus = async () => {
       try {
+        const token = localStorage.getItem('token');
+        if (!token) {
+          setInitializing(false);
+          return;
+        }
         const response = await api.get('/auth/profile/');
         if (response.data) {
           setCurrentUser(response.data);
         }
       } catch (error) {
         // Clear any stored tokens if authentication fails
-        localStorage.removeItem('token');
+        //localStorage.removeItem('token');
         console.error('Authentication check failed:', error);
       } finally {
         setInitializing(false);

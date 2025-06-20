@@ -39,7 +39,7 @@ const VerifyEmail = () => {
   useEffect(() => {
     const verifyEmail = async () => {
       try {
-        await api.post('/auth/verify-email/', { uid, token });
+        await api.post('/verify-email/', { uid, token });
         setSuccess(true);
       } catch (err) {
         console.error('Email verification error:', err);
